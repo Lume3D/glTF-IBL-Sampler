@@ -4,6 +4,20 @@
 #include "stdio.h"
 
 constexpr auto g_PipelineCachePath = "pipeline.cache";
+// VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME is only defined with VK_ENABLE_BETA_EXTENSIONS
+constexpr auto g_PortabilitySubsetExtensionName = "VK_KHR_portability_subset";
+
+static bool hasExtension(const std::vector<VkExtensionProperties>& _extensions, const char* _name)
+{
+	for (const VkExtensionProperties& prop : _extensions)
+	{
+		if (strcmp(prop.extensionName, _name) == 0)
+		{
+			return true;
+		}
+	}
+	return false;
+}
 
 IBLLib::vkHelper::vkHelper()
 {
@@ -38,8 +52,27 @@ VkResult IBLLib::vkHelper::initialize(uint32_t _phyDeviceIndex, uint32_t _descri
 		}
 
 		std::vector<const char*> extensions;
-		extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-		extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+		VkInstanceCreateFlags instanceFlags = 0u;
+#if defined(__APPLE__)
+		// MoltenVK is a portability driver: newer loaders only enumerate it when the instance opts in,
+		// and the VK_KHR_portability_subset it then requires depends on VK_KHR_get_physical_device_properties2.
+		// Other platforms keep their conformant devices only, so they don't opt in.
+		uint32_t extensionCount = 0u;
+		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+
+		std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, availableExtensions.data());
+
+		if (hasExtension(availableExtensions, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
+		{
+			extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+			instanceFlags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+		}
+		if (hasExtension(availableExtensions, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
+		{
+			extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+		}
+#endif
 
 		uint32_t layerCount = 0u;
 		vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -73,19 +106,11 @@ VkResult IBLLib::vkHelper::initialize(uint32_t _phyDeviceIndex, uint32_t _descri
 		VkInstanceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		createInfo.pApplicationInfo = &appInfo;
-		createInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-		
-		if (!layers.empty())
-		{
-			createInfo.enabledLayerCount = static_cast<uint32_t>(layers.size());
-			createInfo.ppEnabledLayerNames = layers.data();
-		}
-		if (!extensions.empty()) 
-		{
-			createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-			createInfo.ppEnabledExtensionNames = extensions.data();
-		}
-		// TODO: extensions and layers if needed
+		createInfo.flags = instanceFlags;
+		createInfo.enabledLayerCount = static_cast<uint32_t>(layers.size());
+		createInfo.ppEnabledLayerNames = layers.data();
+		createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+		createInfo.ppEnabledExtensionNames = extensions.data();
 
 		if ((res = vkCreateInstance(&createInfo, nullptr, &m_instance)) != VK_SUCCESS)
 		{
@@ -179,15 +204,25 @@ VkResult IBLLib::vkHelper::initialize(uint32_t _phyDeviceIndex, uint32_t _descri
 		queueCreateInfo.pQueuePriorities = &queuePriority;
 
 		VkPhysicalDeviceFeatures deviceFeatures{}; // TODO: fill required device features
-		std::vector<const char*> device_extensions;
-		device_extensions.push_back("VK_KHR_portability_subset");
+		// A portability device must have VK_KHR_portability_subset enabled; other devices don't offer it.
+		uint32_t deviceExtensionCount = 0u;
+		vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &deviceExtensionCount, nullptr);
+
+		std::vector<VkExtensionProperties> availableDeviceExtensions(deviceExtensionCount);
+		vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &deviceExtensionCount, availableDeviceExtensions.data());
+
+		std::vector<const char*> deviceExtensions;
+		if (hasExtension(availableDeviceExtensions, g_PortabilitySubsetExtensionName))
+		{
+			deviceExtensions.push_back(g_PortabilitySubsetExtensionName);
+		}
 		VkDeviceCreateInfo deviceCreateInfo{};
 		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
 		deviceCreateInfo.queueCreateInfoCount = 1u;
 		deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
-		deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(device_extensions.size());
-		deviceCreateInfo.ppEnabledExtensionNames = device_extensions.data();
+		deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
 		if ((res = vkCreateDevice(m_physicalDevice, &deviceCreateInfo, nullptr, &m_logicalDevice)) != VK_SUCCESS)
 		{
