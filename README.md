@@ -53,6 +53,7 @@ The CLI takes an environment HDR image as input. The filtered specular and diffu
 * ```-inputPath```: path to panorama image (default) or cube map (if inputIsCubeMap flag ist set)
 * ```-outCubeMap```: output path for filtered cube map (default=outputCubeMap.ktx2)
 * ```-outLUT```: output path for BRDF LUT (default=outputLUT.png)
+* ```-outOctahedral```: output path for the octahedral mapped 2D version of the filtered cube map (needs a .ktx cube map output)
 * ```-distribution```: NDF to sample (Lambertian, GGX, Charlie)
 * ```-sampleCount```: number of samples used for filtering (default = 1024)
 * ```-mipLevelCount```: number of mip levels of specular cube map. If omitted, an optimal mipmap level is chosen, based on the input panorama's resolution.
