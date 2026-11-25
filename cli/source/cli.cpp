@@ -1,4 +1,5 @@
 #include "GltfIblSampler.h"
+#include "octahedral.h"
 #include <cstring>
 #include <stdio.h>
 #include <stdlib.h> 
@@ -19,6 +20,7 @@ int main(int argc, char* argv[])
 	float lodBias = 0.0f;
 	bool enableDebugOutput = false;
 	const char* pathOutSH = nullptr;
+	const char* pathOutOctahedral = nullptr;
 
 	const char* targetFormatString = "R16G16B16A16_SFLOAT";
 	const char* distributionString = "GGX";
@@ -33,6 +35,7 @@ int main(int argc, char* argv[])
 		printf("-outCubeMap: output path for filtered cube map\n");
 		printf("-outLUT output path for BRDF LUT\n");
 		printf("-outSH: output path for spherical harmonics coefficients (default = sh.txt)\n");
+		printf("-outOctahedral: output path for the octahedral mapped 2D version of the filtered cube map (KTX 1)\n");
 		printf("-distribution NDF to sample (Lambertian, GGX, Charlie, GGXCubeMap)\n");
 		printf("-sampleCount: number of samples used for filtering (default = 1024)\n");
 		printf("-mipLevelCount: number of mip levels of specular cube map. If omitted, an optimal mipmap level is chosen, based on the input panorama's resolution.\n");
@@ -62,6 +65,10 @@ int main(int argc, char* argv[])
 		else if (strcmp(argv[i], "-outSH") == 0)
 		{
 			pathOutSH = nextArg;
+		}
+		else if (strcmp(argv[i], "-outOctahedral") == 0)
+		{
+			pathOutOctahedral = nextArg;
 		}
 		else if (strcmp(argv[i], "-sampleCount") == 0)
 		{
@@ -162,6 +169,10 @@ int main(int argc, char* argv[])
 	{
 		printf("outSH set to %s \n", pathOutSH);
 	}
+	if (pathOutOctahedral != nullptr)
+	{
+		printf("outOctahedral set to %s \n", pathOutOctahedral);
+	}
 
 	printf("sampleCount set to %d \n", sampleCount);
 	printf("mipLevelCount set to %d \n", mipLevelCount);
@@ -175,6 +186,24 @@ int main(int argc, char* argv[])
 	if (res != Result::Success)
 	{
 		return -1;
+	}
+
+	if (pathOutOctahedral != nullptr)
+	{
+		// The octahedral map is built from the texels of the cubemap file this tool just wrote, which
+		// is only stored as raw KTX 1 texel data when the output name ends in ".ktx" (see
+		// downloadCubemap).
+		if (strlen(pathOutCubeMap) < 4u || strcmp(pathOutCubeMap + strlen(pathOutCubeMap) - 4u, ".ktx") != 0)
+		{
+			printf("The octahedral map needs the cube map saved as KTX 1 (a .ktx output), not %s \n", pathOutCubeMap);
+			return -1;
+		}
+
+		if (bakeOctahedralMap(pathOutCubeMap, pathOutOctahedral) != Result::Success)
+		{
+			printf("Failed to generate the octahedral map \n");
+			return -1;
+		}
 	}
 
 	return 0;

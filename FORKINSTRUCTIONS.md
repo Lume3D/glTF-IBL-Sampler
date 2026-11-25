@@ -10,6 +10,15 @@ These coefficients are then passed to the fragment shader, where they are used t
 ## B10G11R11_UFLOAT_PACK32 Format Support  
 The sampler now supports output in the **B10G11R11_UFLOAT_PACK32** format, allowing for efficient storage and retrieval of high-precision lighting data.  
 
+## Octahedral Radiance Map Output  
+The sampler now supports an **octahedral mapped 2D** version of the filtered cube map via the **-outOctahedral** flag. The octahedral map packs the cubemap's mip chain into a single 2D KTX 1 texture (width = 2 x face size), sampled by the Lume runtime's octahedral indirect specular mode. The mapping is the exact inverse of the runtime's `GetOctahedralRadianceUv()`, with seam fixed border texels, so both representations sample identical radiance.
+
+The implementation can be found in:  
+
+- **octahedral.h / octahedral.cpp** – These files contain the core logic for converting the filtered R11G11B10 cubemap KTX 1 into its octahedral mapped 2D KTX 1.  
+
+The cubemap must be saved as KTX 1 (a `.ktx` output) for the conversion, since the octahedral map is built from its texel data.  
+
 ## Environment Map Generation Tool  
 A command-line tool is included in the **tools/** directory to generate glTF environments with references to the processed maps. The tool processes an HDR environment map and produces a specular map, a skybox map, and the precomputed spherical harmonic coefficients.  
 
